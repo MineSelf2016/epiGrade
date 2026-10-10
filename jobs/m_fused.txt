@@ -1,0 +1,95 @@
+gse3p_3p GSE3P donor 0 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 1 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 2 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 3 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 4 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 5 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 6 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P donor 7 results_fused results_epigrade/GSE3P_donor_full/splits.json --input-ablation
+gse3p_3p GSE3P cell 0 results_fused results_epigrade/GSE3P_cell_full/splits.json --input-ablation
+gse3p_3p GSE3P cell 1 results_fused results_epigrade/GSE3P_cell_full/splits.json --input-ablation
+gse3p_3p GSE3P cell 2 results_fused results_epigrade/GSE3P_cell_full/splits.json --input-ablation
+gse3p_3p GSE3P cell 3 results_fused results_epigrade/GSE3P_cell_full/splits.json --input-ablation
+gse3p_3p GSE3P cell 4 results_fused results_epigrade/GSE3P_cell_full/splits.json --input-ablation
+eccite_5p ECCITE donor 0 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 1 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 2 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 3 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 4 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 5 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 6 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE donor 7 results_fused results_epigrade/ECCITE_donor_full/splits.json --input-ablation
+eccite_5p ECCITE cell 0 results_fused results_epigrade/ECCITE_cell_full/splits.json --input-ablation
+eccite_5p ECCITE cell 1 results_fused results_epigrade/ECCITE_cell_full/splits.json --input-ablation
+eccite_5p ECCITE cell 2 results_fused results_epigrade/ECCITE_cell_full/splits.json --input-ablation
+eccite_5p ECCITE cell 3 results_fused results_epigrade/ECCITE_cell_full/splits.json --input-ablation
+eccite_5p ECCITE cell 4 results_fused results_epigrade/ECCITE_cell_full/splits.json --input-ablation
+cbmc CBMC cell 0 results_fused results_epigrade/CBMC_cell_full/splits.json --input-ablation
+cbmc CBMC cell 1 results_fused results_epigrade/CBMC_cell_full/splits.json --input-ablation
+cbmc CBMC cell 2 results_fused results_epigrade/CBMC_cell_full/splits.json --input-ablation
+cbmc CBMC cell 3 results_fused results_epigrade/CBMC_cell_full/splits.json --input-ablation
+cbmc CBMC cell 4 results_fused results_epigrade/CBMC_cell_full/splits.json --input-ablation
+cbmc CBMC cell 0 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consistency
+cbmc CBMC cell 1 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consistency
+cbmc CBMC cell 2 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consistency
+cbmc CBMC cell 3 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consistency
+cbmc CBMC cell 4 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE cell 0 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE cell 1 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE cell 2 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE cell 3 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE cell 4 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 0 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 1 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 2 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 3 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 4 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 5 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 6 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+eccite_5p ECCITE donor 7 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consistency
+cbmc CBMC cell 0 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_spread_weights
+cbmc CBMC cell 1 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_spread_weights
+cbmc CBMC cell 2 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_spread_weights
+cbmc CBMC cell 3 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_spread_weights
+cbmc CBMC cell 4 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE cell 0 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE cell 1 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE cell 2 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE cell 3 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE cell 4 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 0 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 1 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 2 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 3 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 4 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 5 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 6 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+eccite_5p ECCITE donor 7 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_spread_weights
+cbmc CBMC cell 0 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consensus
+cbmc CBMC cell 1 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consensus
+cbmc CBMC cell 2 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consensus
+cbmc CBMC cell 3 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consensus
+cbmc CBMC cell 4 results_fused results_epigrade/CBMC_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE cell 0 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE cell 1 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE cell 2 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE cell 3 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE cell 4 results_fused results_epigrade/ECCITE_cell_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 0 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 1 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 2 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 3 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 4 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 5 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 6 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor 7 results_fused results_epigrade/ECCITE_donor_full/splits.json --retrieval-variant with_consensus
+eccite_5p ECCITE donor5 0 results_fused/donor5 results_epigrade/donor5/ECCITE_donor_full/splits.json
+eccite_5p ECCITE donor5 1 results_fused/donor5 results_epigrade/donor5/ECCITE_donor_full/splits.json
+eccite_5p ECCITE donor5 2 results_fused/donor5 results_epigrade/donor5/ECCITE_donor_full/splits.json
+eccite_5p ECCITE donor5 3 results_fused/donor5 results_epigrade/donor5/ECCITE_donor_full/splits.json
+eccite_5p ECCITE donor5 4 results_fused/donor5 results_epigrade/donor5/ECCITE_donor_full/splits.json
+gse3p_3p GSE3P donor5 0 results_fused/donor5 results_epigrade/donor5/GSE3P_donor_full/splits.json
+gse3p_3p GSE3P donor5 1 results_fused/donor5 results_epigrade/donor5/GSE3P_donor_full/splits.json
+gse3p_3p GSE3P donor5 2 results_fused/donor5 results_epigrade/donor5/GSE3P_donor_full/splits.json
+gse3p_3p GSE3P donor5 3 results_fused/donor5 results_epigrade/donor5/GSE3P_donor_full/splits.json
+gse3p_3p GSE3P donor5 4 results_fused/donor5 results_epigrade/donor5/GSE3P_donor_full/splits.json

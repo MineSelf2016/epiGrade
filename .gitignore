@@ -1,0 +1,11 @@
+data/
+results*/
+logs/
+paper/
+epigrade_*.tar.gz
+epigrade_figshare.zip
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

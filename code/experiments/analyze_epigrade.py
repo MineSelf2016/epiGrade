@@ -1,0 +1,613 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from epigrade.stats import (
+    corrected_resampled_ttest,
+    holm_bonferroni,
+    paired_ttest,
+)
+
+VARIANT_LABEL = {
+    "full": "Full model",
+    "prior_only": "Retrieved prior only",
+    "ensemble": "Ensemble alone (no prior)",
+    "network": "Single network alone (no prior)",
+    "network_fused": "Single network fused with the prior",
+    "average": "Ensemble and prior averaged with equal weights",
+    "prior_input": "Prior as network input, in-sample training priors",
+    "prior_input_crossfit": "Prior as network input, cross-fitted training priors",
+    "residual_corrector": "Disagreement-guided residual corrector",
+    "with_consistency": "Retrieval with neighbourhood-consistency gating",
+    "with_spread_weights": "Retrieval with spread-rescaled weights",
+    "with_consensus": "Retrieval with both (consensus retrieval)",
+}
+ABLATION_ORDER = ("prior_only", "ensemble", "network", "network_fused", "average",
+                  "prior_input", "prior_input_crossfit", "residual_corrector",
+                  "with_consistency", "with_spread_weights", "with_consensus")
+SPLIT_LABEL = {"cell": "cell-level", "donor": "donor-grouped"}
+DATASET_LABEL = {"CBMC": "CBMC", "ECCITE": "PBMC 5$'$", "GSE3P": "PBMC 3$'$"}
+
+
+def load_runs(results_dir: Path) -> pd.DataFrame:
+    rows = []
+    for summary_path in sorted(results_dir.glob("*/summary.json")):
+        if summary_path.parent.name.startswith("xc_"):
+            continue
+        with summary_path.open() as handle:
+            summary = json.load(handle)
+        folds = summary.get("folds", [])
+        if not folds:
+            continue
+        rows.append({
+            "dataset": summary["dataset"],
+            "split": summary["split_mode"],
+            "variant": summary["variant"],
+            "n_folds": len(folds),
+            "pcc_p_mean": summary["fold_mean_pcc_protein"],
+            "pcc_p_sd": summary["fold_sd_pcc_protein"],
+            "pcc_c_mean": float(np.mean([f["test_pcc_cell"] for f in folds])),
+            "pcc_c_sd": float(np.std([f["test_pcc_cell"] for f in folds], ddof=1)),
+            "cmd_p": float(np.mean([f["test_cmd_protein"] for f in folds])),
+            "mmd": float(np.mean([f["test_mmd"] for f in folds])),
+            "nw1": float(np.mean([f["test_nw1"] for f in folds])),
+            "rmse": float(np.mean([f["test_rmse"] for f in folds])),
+            "pooled_pcc_p": summary["pooled_metrics"]["pcc_protein_mean"],
+            "prior_pcc_p": float(np.mean([f["prior_pcc_protein"] for f in folds])),
+            "fold_pcc_p": [f["test_pcc_protein"] for f in folds],
+            "n_train": int(np.mean([f["n_fit"] for f in folds])),
+            "n_test": int(np.mean([f["n_test"] for f in folds])),
+            "minutes": float(np.sum([f.get("minutes", 0) for f in folds])),
+        })
+    return pd.DataFrame(rows)
+
+
+def run_tests(runs: pd.DataFrame) -> pd.DataFrame:
+    records = []
+    for (dataset, split), block in runs.groupby(["dataset", "split"]):
+        indexed = block.set_index("variant")
+        if "full" not in indexed.index:
+            continue
+        reference = indexed.loc["full"]
+        family = []
+        for variant in indexed.index:
+            if variant == "full":
+                continue
+            other = indexed.loc[variant]
+            if len(other["fold_pcc_p"]) != len(reference["fold_pcc_p"]):
+                continue
+            differences = np.asarray(reference["fold_pcc_p"]) - np.asarray(other["fold_pcc_p"])
+            family.append((variant,
+                           corrected_resampled_ttest(
+                               differences, reference["n_train"], reference["n_test"],
+                               comparison=f"full - {variant}"),
+                           paired_ttest(differences, comparison=f"full - {variant}")))
+        if not family:
+            continue
+        corrected = holm_bonferroni([item[1] for item in family])
+        for (variant, _, naive), adjusted in zip(family, corrected):
+            records.append({
+                "dataset": dataset, "split": split, "variant": variant,
+                "delta_pcc_p": adjusted["mean_difference"],
+                "p_corrected": adjusted["pvalue"],
+                "p_holm": adjusted["pvalue_holm"],
+                "significant": adjusted["significant_0.05"],
+                "p_naive": naive.pvalue,
+            })
+    return pd.DataFrame(records)
+
+
+def fmt(value: float, digits: int = 3) -> str:
+    return "--" if value is None or (isinstance(value, float) and np.isnan(value)) \
+        else f"{value:.{digits}f}"
+
+
+def write_main_table(runs: pd.DataFrame, path: Path) -> None:
+    full = runs[runs.variant == "full"]
+    lines = [
+        "% generated by analyze_results.py -- do not edit",
+        "\\begin{table*}[t]", "\\centering",
+        '\\caption{Performance under cell-level and donor-grouped cross-validation (five folds for cell-level splitting and one fold per donor for grouped splitting). Values are fold means; standard deviations are shown for PCC-P and PCC-C. Prior PCC-P evaluates the retrieved prior independently of the network ensemble. Arrows indicate the preferred direction.}',
+        "\\label{tab:main}",
+        "\\small",
+        "\\setlength{\\tabcolsep}{4.5pt}",
+        "\\begin{tabular}{llcccccc}", "\\toprule",
+        "Dataset & Protocol & PCC-P $\\uparrow$ & PCC-C $\\uparrow$ & "
+        "CMD $\\downarrow$ & nW$_1$ $\\downarrow$ & RMSE $\\downarrow$ & "
+        "Prior PCC-P \\\\", "\\midrule",
+    ]
+    for dataset in ("CBMC", "ECCITE", "GSE3P"):
+        block = full[full.dataset == dataset]
+        for split in ("cell", "donor"):
+            row = block[block.split == split]
+            if row.empty:
+                continue
+            r = row.iloc[0]
+            lines.append(
+                f"{DATASET_LABEL[dataset]} & {SPLIT_LABEL[split]} & "
+                f"{fmt(r.pcc_p_mean)} $\\pm$ {fmt(r.pcc_p_sd)} & "
+                f"{fmt(r.pcc_c_mean)} $\\pm$ {fmt(r.pcc_c_sd)} & "
+                f"{fmt(r.cmd_p)} & {fmt(r.nw1)} & {fmt(r.rmse)} & "
+                f"{fmt(r.prior_pcc_p)} \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table*}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_ablation_table_full(runs: pd.DataFrame, tests: pd.DataFrame, path: Path) -> None:
+    lines = [
+        "% generated by analyze_results.py -- do not edit",
+        "\\begin{table*}[p]", "\\centering",
+        '\\caption{Component ablation in full (fold-mean PCC-P). $\\Delta$ denotes full-model minus variant accuracy. Corrected $p$ values use the Nadeau--Bengio resampled $t$-test with Holm adjustment across variants within each dataset and protocol. All variants use identical folds and, except for the residual corrector, the same encoder. Unchanged networks reuse the ensemble members. The earlier residual corrector uses $K = 5$. Uncorrected paired $t$-test results illustrate the effect of fold dependence.}',
+        "\\label{tab:supp-ablation}",
+        "\\small", "\\renewcommand{\\arraystretch}{0.97}", "\\setlength{\\tabcolsep}{4pt}",
+        "\\begin{tabular}{llccccc}", "\\toprule",
+        "Dataset & Protocol & Variant & PCC-P & $\\Delta$ & "
+        "$p_{\\mathrm{Holm}}$ & $p_{\\mathrm{naive}}$ \\\\", "\\midrule",
+    ]
+    for dataset in ("CBMC", "ECCITE", "GSE3P"):
+        for split in ("cell", "donor"):
+            block = runs[(runs.dataset == dataset) & (runs.split == split)]
+            if block.empty:
+                continue
+            full_row = block[block.variant == "full"]
+            if full_row.empty:
+                continue
+            lines.append(f"\\multicolumn{{7}}{{l}}{{\\textit{{{DATASET_LABEL[dataset]}, "
+                         f"{SPLIT_LABEL[split]}}}}} \\\\")
+            lines.append(f" & & {VARIANT_LABEL['full']} & "
+                         f"\\textbf{{{fmt(full_row.iloc[0].pcc_p_mean)}}} & -- & -- & -- \\\\")
+            for variant in ABLATION_ORDER:
+                row = block[block.variant == variant]
+                if row.empty:
+                    continue
+                test = tests[(tests.dataset == dataset) & (tests.split == split)
+                             & (tests.variant == variant)]
+                delta = _signed(test.iloc[0].delta_pcc_p) if not test.empty else "--"
+                holm = f"{test.iloc[0].p_holm:.3g}" if not test.empty else "--"
+                naive = f"{test.iloc[0].p_naive:.3g}" if not test.empty else "--"
+                lines.append(f" & & {VARIANT_LABEL[variant]} & "
+                             f"{fmt(row.iloc[0].pcc_p_mean)} & {delta} & {holm} & {naive} \\\\")
+            lines.append("\\midrule")
+    if lines[-1] == "\\midrule":
+        lines.pop()
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table*}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+ABLATION_GROUPS = (
+    ("Components of the model", ("prior_only", "ensemble", "network",
+                                 "network_fused", "average")),
+    ("Other uses of the prior", ("prior_input", "prior_input_crossfit",
+                                 "residual_corrector")),
+    ("Retrieval refinements", ("with_consistency", "with_spread_weights",
+                               "with_consensus")),
+)
+SETTINGS = (("CBMC", "cell"), ("ECCITE", "cell"), ("ECCITE", "donor"),
+            ("GSE3P", "cell"), ("GSE3P", "donor"))
+
+
+def write_ablation_table(runs: pd.DataFrame, tests: pd.DataFrame, path: Path) -> None:
+    lines = [
+        "% generated by analyze_results.py -- do not edit",
+        "\\begin{table*}[t]", "\\centering",
+        "\\caption{Component ablation. The first row gives the fold-mean PCC-P "
+        "of the full model; other entries give $\\Delta$, full-model minus "
+        "variant accuracy, so positive values indicate a weaker variant. "
+        "$^{*}$\\,$p_{\\mathrm{Holm}} < 0.05$ (Nadeau--Bengio resampled $t$-test "
+        "with Holm adjustment across variants within each dataset and protocol); "
+        "-- not evaluated. All variants use identical folds and, except for the "
+        "residual corrector ($K = 5$), the same encoder. Variant accuracies and "
+        "uncorrected $p$ values are given in Supplementary Table~S6.}",
+        "\\label{tab:ablation}",
+        "\\small", "\\setlength{\\tabcolsep}{5pt}",
+        "\\begin{tabular}{lccccc}", "\\toprule",
+        " & " + " & ".join(DATASET_LABEL[d] for d, _ in SETTINGS) + " \\\\",
+        "Variant & " + " & ".join(SPLIT_LABEL[s_] for _, s_ in SETTINGS) + " \\\\",
+        "\\midrule",
+    ]
+    full = []
+    for dataset, split in SETTINGS:
+        row = runs[(runs.dataset == dataset) & (runs.split == split)
+                   & (runs.variant == "full")]
+        full.append(fmt(row.iloc[0].pcc_p_mean) if not row.empty else "--")
+    lines.append("Full model (PCC-P) & " + " & ".join(full) + " \\\\")
+    for title, variants in ABLATION_GROUPS:
+        lines += ["\\midrule",
+                  f"\\multicolumn{{6}}{{l}}{{\\textit{{{title}}}}} \\\\"]
+        for variant in variants:
+            cells = []
+            for dataset, split in SETTINGS:
+                test = tests[(tests.dataset == dataset) & (tests.split == split)
+                             & (tests.variant == variant)]
+                if test.empty:
+                    cells.append("--")
+                    continue
+                delta = float(test.iloc[0].delta_pcc_p)
+                mark = "$^{*}$" if test.iloc[0].p_holm < 0.05 else ""
+                text = (("+" if delta > 0 else "-") + "{<}0.001"
+                        if mark and abs(delta) < 5e-4 else _signed(delta))
+                cells.append(f"${text}${mark}")
+            lines.append(f"\\quad {VARIANT_LABEL[variant]} & "
+                         + " & ".join(cells) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table*}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+BASELINE_LABEL = {
+    "scipenn": "sciPENN \\citep{lakkis2022}",
+    "totalvi": "totalVI \\citep{gayoso2021}",
+    "seurat_r": "Anchor-based reference mapping (Seurat 5.3.0)",
+    "seurat_anchor": "Anchor-based reference mapping (reimplementation)",
+    "knn_pca": "$k$NN protein transfer, PCA space",
+    "knn_expression": "$k$NN protein transfer, expression space",
+    "global_mean": "Atlas mean profile",
+}
+
+
+def write_baselines_table(legacy_dir: Path, results_dir: Path,
+                          runs: pd.DataFrame, path: Path) -> None:
+    blocks = {}
+    for directory, pattern in ((legacy_dir, "*_baselines/baseline_summary.json"),
+                               (results_dir, "*_external/baseline_summary.json")):
+        for summary_path in sorted(directory.glob(pattern)):
+            block = json.loads(summary_path.read_text())
+            blocks[(block["dataset"], block["split_mode"])] = block
+    if not blocks:
+        path.write_text("% no baseline runs yet\n", encoding="utf-8")
+        return
+
+    keys = sorted(blocks, key=lambda k: (["CBMC", "ECCITE", "GSE3P"].index(k[0])
+                                         if k[0] in ("CBMC", "ECCITE", "GSE3P") else 9,
+                                         k[1]))
+    lines = [
+        "% generated by analyze_results.py -- do not edit",
+        "\\begin{table*}[t]", "\\centering",
+        '\\caption{Comparison with published methods and reference-based controls using identical folds, gene panels and reference cells. Values are mean PCC-P across five cell-level folds or one fold per donor. Anchor-based mapping is evaluated using both the released package and our reimplementation. Both $k$NN controls use $K = 30$. Published implementations retain their own normalisation procedures; comparisons are therefore restricted to scale-invariant metrics.}',
+        "\\label{tab:baselines}",
+        "\\small", "\\setlength{\\tabcolsep}{4pt}",
+        "\\begin{tabular}{l" + "c" * len(keys) + "}", "\\toprule",
+    ]
+    header = "Method"
+    for dataset, split in keys:
+        header += (f" & \\begin{{tabular}}[c]{{@{{}}c@{{}}}}{DATASET_LABEL[dataset]}"
+                   f"\\\\ {SPLIT_LABEL[split]}\\end{{tabular}}")
+    lines += [header + " \\\\", "\\midrule"]
+
+    model_row = "\\textsc{EpiGrade}"
+    prior_row = "Retrieval prior only"
+    for dataset, split in keys:
+        model = runs[(runs.dataset == dataset) & (runs.split == split)
+                     & (runs.variant == "full")]
+        prior = runs[(runs.dataset == dataset) & (runs.split == split)
+                     & (runs.variant == "prior_only")]
+        model_row += f" & \\textbf{{{fmt(model.iloc[0].pcc_p_mean)}}}" if not model.empty else " & --"
+        prior_row += f" & {fmt(prior.iloc[0].pcc_p_mean)}" if not prior.empty else " & --"
+    lines += [model_row + " \\\\", prior_row + " \\\\", "\\midrule"]
+
+    for key in keys:
+        model = runs[(runs.dataset == key[0]) & (runs.split == key[1])
+                     & (runs.variant == "full")]
+        if model.empty:
+            continue
+        expected = int(model.iloc[0].n_folds)
+        for method, entry in blocks[key]["methods"].items():
+            if len(entry["folds"]) != expected:
+                raise SystemExit(
+                    f"{key[0]}/{key[1]}: {method} was evaluated on "
+                    f"{len(entry['folds'])} folds but the model on {expected}; "
+                    "rerun the baselines against this protocol")
+
+    for method, label in BASELINE_LABEL.items():
+        row = label
+        for key in keys:
+            entry = blocks[key]["methods"].get(method)
+            row += f" & {fmt(entry['fold_mean_pcc_protein'])}" if entry else " & --"
+        lines.append(row + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table*}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_cross_cohort_table(results_dir: Path, path: Path) -> None:
+    blocks = []
+    for summary_path in sorted(results_dir.glob("xc_*/summary.json")):
+        if summary_path.parent.name.startswith("xc_consensus_"):
+            continue
+        with summary_path.open() as handle:
+            blocks.append(json.load(handle))
+    if not blocks:
+        path.write_text("% no cross-cohort results yet\n", encoding="utf-8")
+        return
+
+    methods = ["EpiGrade", "retrieval_prior", "seurat_anchor", "knn_pca",
+               "knn_expression", "global_mean"]
+    label = {"EpiGrade": "\\textsc{EpiGrade}",
+             "retrieval_prior": "Retrieval prior only",
+             "seurat_anchor": "Anchor-based reference mapping",
+             "knn_pca": "$k$NN transfer (PCA space)",
+             "knn_expression": "$k$NN transfer (expression space)",
+             "global_mean": "Atlas mean profile"}
+    lines = [
+        "% generated by analyze_results.py -- do not edit",
+        "\\begin{table*}[t]", "\\centering",
+        "\\caption{Transfer from a paired reference atlas to an independent "
+        "study. Genes are intersected on symbol and antibody panels are "
+        "harmonised to canonical symbols before intersection; the number of "
+        "shared proteins is given per column. Every method sees the same "
+        "harmonised atlas and query.}",
+        "\\label{tab:crosscohort}",
+        "\\begin{tabular}{l" + "cc" * len(blocks) + "}", "\\toprule",
+    ]
+    header = "Method"
+    subheader = ""
+    for block in blocks:
+        header += (f" & \\multicolumn{{2}}{{c}}{{{block['atlas']} $\\rightarrow$ "
+                   f"{block['query']} ({block['n_shared_proteins']} proteins)}}")
+        subheader += " & PCC-P & PCC-C"
+    lines += [header + " \\\\", subheader + " \\\\", "\\midrule"]
+    for method in methods:
+        if not any(method in block["methods"] for block in blocks):
+            continue
+        row = label[method]
+        for block in blocks:
+            entry = block["methods"].get(method)
+            row += (f" & {fmt(entry['pcc_protein_mean'])} & {fmt(entry['pcc_cell_mean'])}"
+                    if entry else " & -- & --")
+        lines.append(row + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table*}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _range(values) -> str:
+    low, high = float(min(values)), float(max(values))
+    if abs(low - high) < 5e-4:
+        return f"${_signed(low)}$"
+    return f"${_signed(low)}$ to ${_signed(high)}$"
+
+
+def _pvalue(p: float) -> str:
+    if p >= 1e-3:
+        return f"{p:.2g}"
+    mantissa, exponent = f"{p:.1e}".split("e")
+    return f"{mantissa} \\times 10^{{{int(exponent)}}}"
+
+
+def _signed(value: float) -> str:
+    return "0.000" if abs(value) < 5e-4 else f"{value:+.3f}"
+
+
+def write_numbers(runs: pd.DataFrame, tests: pd.DataFrame, results_dir: Path,
+                  path: Path) -> None:
+    macros: dict[str, str] = {}
+
+    _DIGIT_WORDS = str.maketrans({
+        "0": "Zero", "1": "One", "2": "Two", "3": "Three", "4": "Four",
+        "5": "Five", "6": "Six", "7": "Seven", "8": "Eight", "9": "Nine",
+    })
+
+    def add(name: str, value: str) -> None:
+        macros[name.translate(_DIGIT_WORDS)] = value
+
+    empty = pd.DataFrame(columns=["dataset", "split", "variant", "delta_pcc_p",
+                                  "pcc_p_mean", "pcc_p_sd"])
+    runs = runs if not runs.empty else empty
+    tests = tests if not tests.empty else empty
+
+    n_settings = runs[runs.variant == "full"].shape[0]
+    for variant, macro in (("ensemble", "numFusionGain"),
+                           ("network_fused", "numEnsembleGain"),
+                           ("network", "numStackGain"),
+                           ("average", "numFittedWeightGain"),
+                           ("prior_input", "numPriorInputGap"),
+                           ("prior_input_crossfit", "numPriorInputCrossfitGap"),
+                           ("residual_corrector", "numResidualCorrectorGap"),
+                           ("with_consensus", "numConsensusGap")):
+        block = tests[tests.variant == variant]
+        add(macro, _range(block.delta_pcc_p) if not block.empty else "[pending]")
+        add(macro + "Coverage",
+            f"{len(block)} of {n_settings}" if not block.empty else "[pending]")
+        if not block.empty:
+            add(macro + "Mean", f"${_signed(block.delta_pcc_p.mean())}$")
+            add(macro + "Significant", f"{int((block.p_holm < 0.05).sum())}")
+
+    if not tests.empty:
+        add("numAblationMaxGap", f"{tests.delta_pcc_p.abs().max():.3f}")
+
+    leak = []
+    for (dataset, split), block in runs.groupby(["dataset", "split"]):
+        a = block[block.variant == "prior_input"]
+        b = block[block.variant == "prior_input_crossfit"]
+        if not a.empty and not b.empty:
+            leak.append(float(b.iloc[0].pcc_p_mean - a.iloc[0].pcc_p_mean))
+    add("numLeakageCost", _range(leak) if leak else "[pending]")
+
+    def paired_gap(a: str, b: str):
+        out = []
+        for _, block in runs.groupby(["dataset", "split"]):
+            x, y = block[block.variant == a], block[block.variant == b]
+            if not x.empty and not y.empty:
+                out.append(float(x.iloc[0].pcc_p_mean - y.iloc[0].pcc_p_mean))
+        return out
+
+    medians, near_zero, highest = [], [], []
+    for weights_dir in sorted(results_dir.glob("*_full")):
+        files = sorted(weights_dir.glob("fold_*/fusion_weights.json"))
+        if not files:
+            continue
+        prior_weight = np.mean([json.loads(f.read_text())["prior"] for f in files], axis=0)
+        medians.append(float(np.median(prior_weight)))
+        near_zero.append(float(np.mean(prior_weight < 0.05)))
+        highest.append(float(prior_weight.max()))
+    if medians:
+        add("numPriorWeightMedianRange", f"{min(medians):.2f}--{max(medians):.2f}")
+        add("numPriorWeightNearZeroRange",
+            f"{100 * min(near_zero):.0f}--{100 * max(near_zero):.0f}\\%")
+        add("numPriorWeightMax", f"{max(highest):.2f}")
+
+    single = paired_gap("network_fused", "network")
+    add("numSingleFusionGain", _range(single) if single else "[pending]")
+    as_input = paired_gap("prior_input_crossfit", "network")
+    add("numPriorInputVsNetwork", _range(as_input) if as_input else "[pending]")
+    add("numPriorInputVsNetworkWorse",
+        f"{sum(v < -5e-4 for v in as_input)} of {len(as_input)}" if as_input else "[pending]")
+
+    external = {}
+    for path_ in sorted(results_dir.glob("*_external/baseline_summary.json")):
+        block = json.loads(path_.read_text())
+        external[(block["dataset"], block["split_mode"])] = block["methods"]
+
+    def fold_values(key, method):
+        entry = external.get(key, {}).get(method)
+        return (np.array([f["test_pcc_protein"] for f in entry["folds"]])
+                if entry else None)
+
+    agree_main, agree_cbmc = [], []
+    sci_gaps, sci_wins = {}, {}
+    for (dataset, split), methods in external.items():
+        ours = runs[(runs.dataset == dataset) & (runs.split == split)
+                    & (runs.variant == "full")]
+        sci = fold_values((dataset, split), "scipenn")
+        if not ours.empty and sci is not None:
+            mine = np.array(ours.iloc[0].fold_pcc_p)
+            if len(mine) == len(sci):
+                sci_gaps[(dataset, split)] = float(mine.mean() - sci.mean())
+                sci_wins[(dataset, split)] = (int((mine > sci).sum()), len(mine))
+                result = corrected_resampled_ttest(
+                    mine - sci, n_train=int(ours.iloc[0].n_train),
+                    n_test=int(ours.iloc[0].n_test))
+                stem = {"CBMC": "CBMC", "ECCITE": "Eccite", "GSE3P": "GSE"}[dataset]
+                tag = f"{stem}{split.capitalize()}"
+                add(f"numSciPenn{tag}Gap", f"${_signed(sci_gaps[(dataset, split)])}$")
+                add(f"numSciPenn{tag}Pvalue", _pvalue(result.pvalue))
+                add(f"numSciPenn{tag}Wins",
+                    f"{sci_wins[(dataset, split)][0]} of {sci_wins[(dataset, split)][1]}")
+        released = fold_values((dataset, split), "seurat_r")
+        ported = fold_values((dataset, split), "seurat_anchor")
+        if released is not None and ported is not None:
+            difference = abs(float(released.mean()) - float(ported.mean()))
+            (agree_cbmc if dataset == "CBMC" else agree_main).append(difference)
+
+    space = []
+    for (dataset, split), methods in external.items():
+        prior = runs[(runs.dataset == dataset) & (runs.split == split)
+                     & (runs.variant == "prior_only")]
+        knn = fold_values((dataset, split), "knn_pca")
+        if not prior.empty and knn is not None:
+            space.append(float(prior.iloc[0].pcc_p_mean - knn.mean()))
+    if space:
+        add("numPriorOverKnnPca", _range(space))
+
+    network_gap = {"cell": [], "donor": []}
+    for (dataset, split), methods in external.items():
+        single = runs[(runs.dataset == dataset) & (runs.split == split)
+                      & (runs.variant == "network")]
+        sci = fold_values((dataset, split), "scipenn")
+        if not single.empty and sci is not None:
+            network_gap[split].append(float(single.iloc[0].pcc_p_mean - sci.mean()))
+    for split, values in network_gap.items():
+        if values:
+            add(f"numNetworkVsSciPenn{split.capitalize()}", _range(values))
+
+    cell = [v for (d, s_), v in sci_gaps.items() if s_ == "cell"]
+    donor = [v for (d, s_), v in sci_gaps.items() if s_ == "donor"]
+    if cell:
+        add("numSciPennCellRange", _range(cell))
+    if donor:
+        add("numSciPennDonorRange", _range(donor))
+    if agree_main:
+        add("numSeuratAgreeMain", f"${max(agree_main):.3f}$")
+    if agree_cbmc:
+        add("numSeuratAgreeCBMC", f"${max(agree_cbmc):.3f}$")
+
+    prior = tests[tests.variant == "prior_only"]
+    if not prior.empty:
+        add("numPriorGapRange",
+            f"{prior.delta_pcc_p.min():.3f}--{prior.delta_pcc_p.max():.3f}")
+    else:
+        add("numPriorGapRange", "[pending]")
+
+
+    full = runs[runs.variant == "full"]
+    for dataset in ("CBMC", "ECCITE", "GSE3P"):
+        for split in ("cell", "donor"):
+            row = full[(full.dataset == dataset) & (full.split == split)]
+            key = f"num{dataset}{split.capitalize()}"
+            add(key, fmt(row.iloc[0].pcc_p_mean) if not row.empty else "[pending]")
+            row_prior = runs[(runs.dataset == dataset) & (runs.split == split)
+                             & (runs.variant == "prior_only")]
+            add(key + "Prior",
+                fmt(row_prior.iloc[0].pcc_p_mean) if not row_prior.empty else "[pending]")
+
+    for dataset in ("ECCITE", "GSE3P"):
+        cell = full[(full.dataset == dataset) & (full.split == "cell")]
+        donor = full[(full.dataset == dataset) & (full.split == "donor")]
+        add(f"num{dataset}GroupDrop",
+            fmt(cell.iloc[0].pcc_p_mean - donor.iloc[0].pcc_p_mean)
+            if not cell.empty and not donor.empty else "[pending]")
+
+    for summary_path in sorted(results_dir.glob("xc_*/summary.json")):
+        if summary_path.parent.name.startswith("xc_consensus_"):
+            continue
+        with summary_path.open() as handle:
+            block = json.load(handle)
+        tag = f"{block['atlas']}{block['query']}".replace("_", "")
+        for method, key in (("EpiGrade", "Method"), ("retrieval_prior", "Prior"),
+                            ("seurat_anchor", "Seurat"), ("ensemble", "Ensemble"),
+                            ("knn_pca", "KnnPca"), ("knn_expression", "KnnExpr")):
+            entry = block["methods"].get(method)
+            add(f"numXC{tag}{key}",
+                fmt(entry["pcc_protein_mean"]) if entry else "[pending]")
+        add(f"numXC{tag}Proteins", str(block["n_shared_proteins"]))
+
+    lines = ["% generated by analyze_results.py -- do not edit"]
+    lines += [f"\\newcommand{{\\{name}}}{{{value}}}" for name, value in sorted(macros.items())]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results", type=Path, default=ROOT.parent / "results_fused")
+    parser.add_argument("--legacy-results", type=Path, default=ROOT.parent / "results",
+                        help="Run directory for the reference-mapping baselines, "
+                             "which are method-independent and are not rerun.")
+    parser.add_argument("--sections", type=Path,
+                        default=ROOT.parent / "paper" / "sections")
+    args = parser.parse_args()
+    args.sections.mkdir(parents=True, exist_ok=True)
+
+    runs = load_runs(args.results)
+    if runs.empty:
+        print("no completed runs yet")
+        write_numbers(runs, pd.DataFrame(), args.results, args.sections / "numbers.tex")
+        return
+
+    tests = run_tests(runs)
+    runs.drop(columns=["fold_pcc_p"]).to_csv(args.results / "all_runs.csv", index=False)
+    if not tests.empty:
+        tests.to_csv(args.results / "significance.csv", index=False)
+
+    write_main_table(runs, args.sections / "table_main.tex")
+    write_baselines_table(args.legacy_results, args.results, runs,
+                          args.sections / "table_baselines.tex")
+    write_ablation_table(runs, tests, args.sections / "table_ablation.tex")
+    write_ablation_table_full(runs, tests, args.sections / "supp_ablation.tex")
+    write_cross_cohort_table(args.results, args.sections / "table_crosscohort.tex")
+    write_numbers(runs, tests, args.results, args.sections / "numbers.tex")
+
+    print(runs[["dataset", "split", "variant", "pcc_p_mean", "pcc_p_sd",
+                "prior_pcc_p", "minutes"]].to_string(index=False))
+    if not tests.empty:
+        print()
+        print(tests.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()

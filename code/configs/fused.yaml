@@ -1,0 +1,79 @@
+method: EpiGrade
+
+preprocessing:
+  normalization_target_sum: 10000.0
+  genes_per_protein: 100
+  gene_cap: 1000
+
+alignment:
+  hidden_dim: 256
+  latent_dim: 128
+  projection_dim: 64
+  depth: 2
+  dropout: 0.1
+  contrastive_weight: 10.0
+  rna_zinb_weight: 0.5
+  protein_zinb_weight: 0.5
+  temperature_init: 0.07
+  epochs: 20
+  learning_rate: 0.0004
+  weight_decay: 0.0001
+  batch_size: 256
+  gradient_clip: 1.0
+
+retrieval:
+  index: IndexFlatIP
+  neighbors: 30
+  temperature: 1.0
+  exact_cosine: true
+  candidates: 20
+  reference_degree: 20
+  consistency_floor: 0.05
+  use_consistency: false
+  use_spread_weights: false
+
+correction:
+  condition_mode: disagreement
+  hidden_dim: 512
+  depth: 4
+  time_dim: 64
+  dropout: 0.1
+  mask_probability: 0.2
+  mask_disagreement_scale: 1.0
+  endpoint_weight: 1.0
+  clean_weight: 1.0
+  source_noise_std: 0.0
+  finetune_rna_encoder: true
+  source_refresh_interval: 10
+  training_group_exclusion: false
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  batch_size: 1024
+  gradient_clip: 1.0
+  validation_interval: 1
+  solver: euler
+  nfe: 1
+  standardize_protein: false
+  rna_skip: false
+  pcc_weight: 0.0
+
+experiment:
+  folds: 5
+  seed: 42
+  validation_fraction_of_reference: 0.125
+  protein_obsm_key: protein_expression
+
+fusion:
+  members: 5
+  hidden_dim: 512
+  dropout: 0.25
+  batch_size: 128
+  learning_rate: 0.001
+  max_epochs: 500
+  patience: 12
+  decay_patience: 6
+  decay_factor: 0.1
+  min_improvement: 0.005
+  quantiles: [0.1, 0.25, 0.75, 0.9]
+  gene_clip: 10.0

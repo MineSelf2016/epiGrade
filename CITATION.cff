@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the accompanying paper."
+title: "EpiGrade: surface-protein imputation from single-cell transcriptomes, graded per protein"
+type: software
+version: 1.0.0
+license: MIT
+authors:
+  - family-names: Qi
+    given-names: Cong
+    affiliation: "New Jersey Institute of Technology"
+  - family-names: Wei
+    given-names: Zhi
+    affiliation: "New Jersey Institute of Technology"
+preferred-citation:
+  type: article
+  title: "Grading surface-protein imputation from single-cell transcriptomes"
+  authors:
+    - family-names: Qi
+      given-names: Cong
+    - family-names: Wei
+      given-names: Zhi
+  journal: "Bioinformatics"
+  year: 2026
